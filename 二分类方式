@@ -3,5 +3,7 @@ str(newdata)
 levels(newdata$Species)<-c("setosa","versicolor",NA)
 str(newdata)
 write.table(newdata,file="iris2.csv",sep=",",row.names=FALSE,col.names=TRUE)
+
+
 library(rattle)
 rattle()
