@@ -1,0 +1,1034 @@
+---
+title: "exercise 4：基于树模型的特征选择"
+author: "YangMenglei（杨梦磊 SA20008161）"
+date: "2021/4/09"
+output:
+  html_document: default
+  pdf_document: default
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+> 在模型构建过程中，特征选择（Feature
+> Selection）又称为属性筛选，通过在数据集中选取有意义的特征，输入到算法模型中进行训练，特征选择主要从两个方面进行考虑:
+
+-   特征是否具有发散性：可通过方差来衡量；方差越小，说明对目标变化的贡献度越小
+
+-   特征与目标的相关性，如两个特征的相关性很大，其中一者往往可以用来替代另一者以此来减少特征量
+
+特征选择可以提高算法运行效率。
+去除不相关的特征往往会降低学习任务的难度，使模型更易理解，比如，使决策树的规则变得更加清晰，去除不相关的变量还可以尽量减少过拟合的风险。
+文献中采用基于SVM和ANN的分类模型来预测柑橘是有机种植还是传统化肥培育，并通过Feature
+selection filter methods来确定最具有代表性意义的特征组合。
+基于此，下面的代码采用了rattle包进行基本的图形绘制，如数据分布，特征相关性，特征重要性，主要目的是探索影响糖尿病的特征因素及建立预测模型。
+
+## Methods
+
+> 常见的特征选择方法：
+
+1.  过滤式（Filter)：对数据集进行特征选择，然后再训练模型，特征选择过程与后续模型训练无关。常用的特征子集评价标准包括相关系数、互信息、信息增益
+
+2.  包裹式（wrapper）：直接把最终要使用的模型的性能作为特征子集的评价标准，性能好，计算开销大
+
+3.  嵌入式（embedding)：将特征选择过程与学习过程融为一体，在同一个优化过程中完成。
+
+> 这里参考文献的Filter Method进行学习建模，思路为：
+
+1.  可视化数据集，及相关系数、方差、特征重要性，如果方差比较低，则说明对目标变量的贡献值越小
+
+2.  移除冗余特征，以及高度关联的特征（其他特征可以反映该特征）
+
+3.  构建模型获取特征重要性，利用ROC曲线分析获取，或决策树特征重要性获取
+
+特征选择：递归特征消除（Recursive Feature
+Elimination）构建不同子集的许多模型，识别哪些特征有助于构建准确模型，同时采用基于树结构的特征选择
+
+其中随机森林算法用于每一轮迭代中评估模型的方法，支持向量机SVM用于评估特征组合的准确度：
+
+## Main Results：
+
+\#变量（特征)重要性
+
+![](images/%E9%87%8D%E8%A6%81%E6%80%A71.png)
+
+\#特征重要性排序(caret包)
+
++-----------------------------------+-----------------------------------+
+| Variable                          | Importance                        |
++===================================+===================================+
+| glucose                           | 0.7881306                         |
++-----------------------------------+-----------------------------------+
+| mass                              | 0.6875672                         |
++-----------------------------------+-----------------------------------+
+| age                               | 0.6969403                         |
++-----------------------------------+-----------------------------------+
+| pregnant                          | 0.6196149                         |
++-----------------------------------+-----------------------------------+
+| pedigree                          | 0.6062015                         |
++-----------------------------------+-----------------------------------+
+| pressure                          | 0.5864590                         |
++-----------------------------------+-----------------------------------+
+| triceps                           | 0.5536269                         |
++-----------------------------------+-----------------------------------+
+| insulin                           | 0.5378619                         |
++-----------------------------------+-----------------------------------+
+
+\#模型评估
+
++--------+-------------------------------------------------+-----------+
+| Model  | Varible subset                                  | Ac        |
+| ID     |                                                 | curacy(%) |
++========+=================================================+===========+
+| \#1    | glucose                                         | 69.30     |
++--------+-------------------------------------------------+-----------+
+| \#2    | glucose mass                                    | 71.35     |
++--------+-------------------------------------------------+-----------+
+| \#3    | glucose mass age                                | 73.96     |
++--------+-------------------------------------------------+-----------+
+| \#4    | glucose mass age pregnant                       | 75.40     |
++--------+-------------------------------------------------+-----------+
+| \#5    | glucose mass age pregnant insulin               | 75,90     |
++--------+-------------------------------------------------+-----------+
+| \#6    | glucose mass age pregnant insulin pedigree      | 72.65     |
++--------+-------------------------------------------------+-----------+
+| \#7    | glucose mass age pregnant insulin pedigree      | 74.00     |
+|        | triceps                                         |           |
++--------+-------------------------------------------------+-----------+
+| \#8    | glucose mass age pregnant insulin pedigree      | 78.35     |
+|        | triceps pressure                                |           |
++--------+-------------------------------------------------+-----------+
+
+## 调用 rattle 进行数据可视化
+
+```{r}
+library(RGtk2)
+library(tibble)
+library(bitops)
+library(rattle)
+rattle()
+```
+
+# 数据导入及划分训练集、验证集、测试集
+
+```{r}
+# Build the train/validate/test datasets.
+# nobs=768 train=538 validate=115 test=115
+library(rattle)   # Access the weather dataset and utilities
+library(magrittr) # Utilise %>% and %<>% pipeline operators.
+building <- TRUE
+scoring  <- ! building
+crv$seed <- 42 
+# Load a dataset from file.
+
+fname         <- "file:///D:/RStudio/project/initial exercise/predictdiabetes.csv" 
+crs$dataset <- read.csv(fname,
+			na.strings=c(".", "NA", "", "?"),
+			strip.white=TRUE, encoding="UTF-8")
+
+#=======================================================================
+# Build the train/validate/test datasets.
+
+# nobs=768 train=538 validate=115 test=115
+
+set.seed(crv$seed)
+
+crs$nobs <- nrow(crs$dataset)
+
+crs$train <- sample(crs$nobs, 0.7*crs$nobs)
+
+crs$nobs %>%
+  seq_len() %>%
+  setdiff(crs$train) %>%
+  sample(0.15*crs$nobs) ->
+crs$validate
+
+crs$nobs %>%
+  seq_len() %>%
+  setdiff(crs$train) %>%
+  setdiff(crs$validate) ->
+crs$test
+
+# The following variable selections have been noted.
+
+crs$input     <- c("pregnant", "glucose", "pressure",
+                   "SkinThickness", "insulin", "mass", "pedigree",
+                   "age")
+
+crs$numeric   <- c("pregnant", "glucose", "pressure",
+                   "SkinThickness", "insulin", "mass", "pedigree",
+                   "age")
+
+crs$categoric <- NULL
+
+crs$target    <- "diabetes"
+crs$risk      <- NULL
+crs$ident     <- NULL
+crs$ignore    <- NULL
+crs$weights   <- NULL
+```
+
+## 随机森林建模评估变量重要性
+
+\#根据随机森林度量变量重要性方法
+
+```{r}
+# Build a Random Forest model using the traditional approach.
+set.seed(crv$seed)
+
+crs$rf <- randomForest::randomForest(as.factor(diabetes) ~. ,
+  data=crs$dataset[crs$train, c(crs$input, crs$target)], 
+  ntree=500,
+  mtry=2,
+  importance=TRUE,
+  na.action=randomForest::na.roughfix,
+  replace=FALSE)
+
+# Generate textual output of the 'Random Forest' model.
+
+crs$rf
+
+# The `pROC' package implements various AUC functions.
+
+# Calculate the Area Under the Curve (AUC).
+
+pROC::roc(crs$rf$y, as.numeric(crs$rf$predicted))
+# List the importance of the variables.
+rn <- round(randomForest::importance(crs$rf), 2)
+rn[order(rn[,3], decreasing=TRUE),]
+
+# Plot the relative importance of the variables.
+
+p <- ggVarImp(crs$rf,
+              title="Variable Importance Random Forest predictdiabetes.csv")
+p
+
+```
+
+```{r Support vector machine}
+#构建支持向量机模型
+
+library(kernlab, quietly=TRUE)
+
+# Build a Support Vector Machine model.
+
+set.seed(crv$seed)
+crs$ksvm <- ksvm(as.factor(diabetes) ~ .,
+      data=crs$dataset[crs$train,c(crs$input, crs$target)],
+      kernel="rbfdot",
+      prob.model=TRUE)
+
+# Generate a textual view of the SVM model.
+
+crs$ksvm
+
+# Time taken: 0.06 secs
+```
+
+## 生成特征之间的相关性
+
+```{r}
+# Generate a correlation plot for the variables.
+library(corrplot, quietly=TRUE)
+
+# Correlations work for numeric variables only.
+
+crs$cor <- cor(crs$dataset[crs$train, crs$numeric], use="pairwise", method="pearson")
+
+# Order the correlations by their strength.
+
+crs$ord <- order(crs$cor[1,])
+crs$cor <- crs$cor[crs$ord, crs$ord]
+
+# Display the actual correlations.
+
+print(crs$cor)
+
+# Graphically display the correlations.
+
+corrplot(crs$cor, mar=c(0,0,1,0))
+title(main="Correlation predictdiabetes.csv using Pearson",
+    sub=)
+
+```
+
+\#主成分分析验证
+
+```{r  Principal Components Analysis}
+# Principal Components Analysis (on numerics only).
+pc <- prcomp(na.omit(crs$dataset[crs$train, crs$numeric]), scale=TRUE, center=TRUE, tol=0)
+
+# Show the output of the analysis.
+pc
+
+# Summarise the importance of the components found.
+summary(pc)
+
+# Display a plot showing the relative importance of the components.
+plot(pc, main="")
+title(main="Principal Components Importance predictdiabetes.csv",
+    sub=)
+axis(1, at=seq(0.7, ncol(pc$rotation)*1.2, 1.2), labels=colnames(pc$rotation), lty=0)
+
+# Display a plot showing the two most principal components.
+biplot(pc, main="")
+title(main="Principal Components predictdiabetes.csv",
+    sub=)
+```
+
+## caret包评估变量相关性
+
+```{r}
+set.seed(1234)
+library(mlbench)
+library(caret)
+library(readr)
+predictdiabetes <- read_csv("predictdiabetes.csv", 
+    col_types = cols(diabetes = col_factor(levels = c("pos", 
+        "neg"))))
+data(predictdiabetes)
+Matrix <- predictdiabetes[,1:8]
+
+library(Hmisc)
+up_CorMatrix <- function(cor,p) {ut <- upper.tri(cor) 
+data.frame(row = rownames(cor)[row(cor)[ut]] ,
+           column = rownames(cor)[col(cor)[ut]], 
+           cor =(cor)[ut] ) }
+
+res <- rcorr(as.matrix(Matrix))
+cor_data <- up_CorMatrix (res$r)
+cor_data <- subset(cor_data, cor_data$cor > 0.38) #关联度大于0.38认为一者可以代表其余变量
+cor_data
+```
+
+\#\#如果两个变量的关联程度很高，那么其中一种往往能代表其余的一种或多种，可以移除掉高度关联的特征，如上图结果所示，pregnant和age
+以及skinThickness和insulin和BMI
+
+## caret包生成特征重要性排序
+
+```{r}
+# ensure results are repeatable
+set.seed(1234)
+# load the library
+library(mlbench)
+library(caret)
+# load the dataset
+data(predictdiabetes)
+data(PimaIndiansDiabetes)
+# prepare training scheme
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+
+# train the model
+model <- train(diabetes~., data=PimaIndiansDiabetes, method="lvq", preProcess="scale", trControl=control)
+
+# estimate variable importance
+importance <- varImp(model, scale=FALSE)
+
+# summarize importance
+print(importance)
+# plot importance
+plot(importance)
+
+```
+
+## caret包 递归交叉检验评估准确度（accuracy）
+
+```{r}
+# ensure the results are repeatable
+set.seed(7)
+# load the library
+library(mlbench)
+library(caret)
+# load the data
+library(readr)
+data(predictdiabetes)
+# define the control using a random forest selection function
+control <- rfeControl(functions=rfFuncs, method="cv", number=10)
+# run the RFE algorithm
+results <- rfe(PimaIndiansDiabetes[,1:8], PimaIndiansDiabetes[,9], sizes=c(1:8),  rfeControl=control)
+# summarize the results
+print(results)
+# list the chosen features
+predictors(results)
+# plot the results
+plot(results, type=c("g", "o"))
+
+## The top 5 variables (out of 8):
+# glucose, mass, age, pregnant, insulin
+```
+
+\#自动特征选择用于构建不同子集的许多模型，识别哪些特征有助于构建准确模型，哪些特征没什么帮助。特征选择的一个流行的自动方法称为
+递归特征消除（Recursive Feature Elimination）或RFE。
+。随机森林算法用于每一轮迭代中评估模型的方法。该算法用于探索所有可能的特征子集。从图中可以看出当使用5个特征时即可获取与最高性能相差无几的结果。
+
+## 利用SVM建模对筛选的特征组合进行评估
+
++--------+-----------------------------------------------+-------------+
+| Model  | Varible subset                                | Accuracy(%) |
+| ID     |                                               |             |
++========+===============================================+=============+
+| \#1    | glucose                                       | 69.30       |
++--------+-----------------------------------------------+-------------+
+| \#2    | glucose mass                                  | 71.35       |
++--------+-----------------------------------------------+-------------+
+| \#3    | glucose mass age                              | 73.96       |
++--------+-----------------------------------------------+-------------+
+| \#4    | glucose mass age pregnant                     | 75.40       |
++--------+-----------------------------------------------+-------------+
+| \#5    | glucose mass age pregnant insulin             | 75,90       |
++--------+-----------------------------------------------+-------------+
+| \#6    | glucose mass age pregnant insulin pedigree    | 72.65       |
++--------+-----------------------------------------------+-------------+
+| \#7    | glucose mass age pregnant insulin pedigree    | 74.00       |
+|        | triceps                                       |             |
++--------+-----------------------------------------------+-------------+
+| \#8    | glucose mass age pregnant insulin pedigree    | 78.35       |
+|        | triceps pressure                              |             |
++--------+-----------------------------------------------+-------------+
+
+```{r}
+#导入数据
+# nobs=768 train=538 validate=115 test=115
+# Load a dataset from file.
+
+fname         <- "file:///D:/RStudio/project/initial exercise/predictdiabetes.csv" 
+crs$dataset <- read.csv(fname,
+			na.strings=c(".", "NA", "", "?"),
+			strip.white=TRUE, encoding="UTF-8")
+
+#=======================================================================
+# Action the user selections from the Data tab. 
+# Build the train/validate/test datasets.
+# nobs=768 train=538 validate=115 test=115
+
+set.seed(crv$seed)
+
+crs$nobs <- nrow(crs$dataset)
+
+crs$train <- sample(crs$nobs, 0.7*crs$nobs)
+
+crs$nobs %>%
+  seq_len() %>%
+  setdiff(crs$train) %>%
+  sample(0.15*crs$nobs) ->
+crs$validate
+
+crs$nobs %>%
+  seq_len() %>%
+  setdiff(crs$train) %>%
+  setdiff(crs$validate) ->
+crs$test
+
+# The following variable selections have been noted.
+
+crs$input     <- c("Pregnancies", "Glucose", "BloodPressure",
+                   "SkinThickness", "Insulin", "BMI",
+                   "DiabetesPedigreeFunction", "Age")
+
+crs$numeric   <- c("Pregnancies", "Glucose", "BloodPressure",
+                   "SkinThickness", "Insulin", "BMI",
+                   "DiabetesPedigreeFunction", "Age")
+
+crs$categoric <- NULL
+
+crs$target    <- "Outcome"
+crs$risk      <- NULL
+crs$ident     <- NULL
+crs$ignore    <- NULL
+crs$weights   <- NULL
+```
+
+```{r}
+
+library(rattle)   # Access the weather dataset and utilities.
+library(magrittr) # Utilise %>% and %<>% pipeline operators.
+
+building <- TRUE
+scoring  <- ! building
+
+crv$seed <- 42 
+# Load a dataset from file.
+
+fname         <- "file:///D:/RStudio/project/initial exercise/predictdiabetes.csv" 
+crs$dataset <- read.csv(fname,
+			na.strings=c(".", "NA", "", "?"),
+			strip.white=TRUE, encoding="UTF-8")
+
+
+# Build the train/validate/test datasets.
+
+# nobs=768 train=538 validate=115 test=115
+
+set.seed(crv$seed)
+
+crs$nobs <- nrow(crs$dataset)
+
+crs$train <- sample(crs$nobs, 0.7*crs$nobs)
+
+crs$nobs %>%
+  seq_len() %>%
+  setdiff(crs$train) %>%
+  sample(0.15*crs$nobs) ->
+crs$validate
+
+crs$nobs %>%
+  seq_len() %>%
+  setdiff(crs$train) %>%
+  setdiff(crs$validate) ->
+crs$test
+
+# The following variable selections have been noted.
+
+crs$input     <- c("pregnant", "glucose", "pressure",
+                   "SkinThickness", "insulin", "mass", "pedigree",
+                   "age")
+
+crs$numeric   <- c("pregnant", "glucose", "pressure",
+                   "SkinThickness", "insulin", "mass", "pedigree",
+                   "age")
+
+crs$categoric <- NULL
+
+crs$target    <- "diabetes"
+crs$risk      <- NULL
+crs$ident     <- NULL
+crs$ignore    <- NULL
+crs$weights   <- NULL
+
+# nobs=768 train=538 validate=115 test=115
+```
+
+## 决策树模型
+
+```{r}
+# Decision Tree 
+
+# The 'rpart' package provides the 'rpart' function.
+
+library(rpart, quietly=TRUE)
+
+# Reset the random number seed to obtain the same results each time.
+
+set.seed(crv$seed)
+
+# Build the Decision Tree model.
+
+crs$rpart <- rpart(diabetes ~ .,
+    data=crs$dataset[crs$train, c(crs$input, crs$target)],
+    method="class",
+    parms=list(split="information"),
+    control=rpart.control(usesurrogate=0, 
+        maxsurrogate=0),
+    model=TRUE)
+
+# Generate a textual view of the Decision Tree model.
+
+print(crs$rpart)
+printcp(crs$rpart)
+cat("\n")
+```
+
+```{r Plot the resulting Decision Tree.}
+drawTreeNodes(crs$rpart)
+title(main="Decision Tree predictdiabetes.csv $ diabetes",
+    sub=)
+```
+
+```{r}
+# Evaluate model performance on the validation dataset. 
+
+library(ROCR)
+
+library(ggplot2, quietly=TRUE)
+
+crs$pr <- kernlab::predict(crs$ksvm, newdata=na.omit(crs$dataset[crs$validate, c(crs$input, crs$target)]),
+    type    = "probabilities")[,2]
+
+# Remove observations with missing target.
+
+no.miss   <- na.omit(na.omit(crs$dataset[crs$validate, c(crs$input, crs$target)])$diabetes)
+miss.list <- attr(no.miss, "na.action")
+attributes(no.miss) <- NULL
+
+if (length(miss.list))
+{
+  pred <- prediction(crs$pr[-miss.list], no.miss)
+} else
+{
+  pred <- prediction(crs$pr, no.miss)
+}
+
+pe <- performance(pred, "tpr", "fpr")
+au <- performance(pred, "auc")@y.values[[1]]
+pd <- data.frame(fpr=unlist(pe@x.values), tpr=unlist(pe@y.values))
+p <- ggplot(pd, aes(x=fpr, y=tpr))
+p <- p + geom_line(colour="red")
+p <- p + xlab("False Positive Rate") + ylab("True Positive Rate")
+p <- p + ggtitle("ROC Curve SVM predictdiabetes.csv [validate] diabetes")
+p <- p + theme(plot.title=element_text(size=10))
+p <- p + geom_line(data=data.frame(), aes(x=c(0,1), y=c(0,1)), colour="grey")
+p <- p + annotate("text", x=0.50, y=0.00, hjust=0, vjust=0, size=5,
+                   label=paste("AUC =", round(au, 2)))
+print(p)
+
+# Calculate the area under the curve for the plot.
+#Remove observations with missing target.
+no.miss   <- na.omit(na.omit(crs$dataset[crs$validate, c(crs$input, crs$target)])$diabetes)
+miss.list <- attr(no.miss, "na.action")
+attributes(no.miss) <- NULL
+
+if (length(miss.list))
+{
+  pred <- prediction(crs$pr[-miss.list], no.miss)
+} else
+{
+  pred <- prediction(crs$pr, no.miss)
+}
+performance(pred, "auc")
+
+#Area under the ROC curve for the ksvm model on predictdiabetes.csv [validate] is 0.8427
+```
+
+```{r Error Matrix}
+
+# Obtain the response from the Decision Tree model.
+crs$pr <- predict(crs$rpart, newdata=crs$dataset[crs$validate, c(crs$input, crs$target)],
+    type="class")
+# Generate the confusion matrix showing counts.
+rattle::errorMatrix(crs$dataset[crs$validate, c(crs$input, crs$target)]$diabetes, crs$pr, count=TRUE)
+# Generate the confusion matrix showing proportions.
+(per <- rattle::errorMatrix(crs$dataset[crs$validate, c(crs$input, crs$target)]$diabetes, crs$pr))
+# Calculate the overall error percentage.
+cat(100-sum(diag(per), na.rm=TRUE))
+# Calculate the averaged class error percentage.
+cat(mean(per[,"Error"], na.rm=TRUE))
+crs$pr <- kernlab::predict(crs$ksvm, newdata=na.omit(crs$dataset[crs$validate, c(crs$input, crs$target)]))
+
+# Generate the confusion matrix showing counts.
+
+rattle::errorMatrix(na.omit(crs$dataset[crs$validate, c(crs$input, crs$target)])$diabetes, crs$pr, count=TRUE)
+
+(per <- rattle::errorMatrix(na.omit(crs$dataset[crs$validate, c(crs$input, crs$target)])$diabetes, crs$pr))
+
+cat(100-sum(diag(per), na.rm=TRUE))
+
+cat(mean(per[,"Error"], na.rm=TRUE))
+```
+
+```{r}
+#=======================================================================
+# Rattle timestamp: 2021-04-12 11:15:04 x86_64-w64-mingw32 
+
+# Action the user selections from the Data tab. 
+
+# Build the train/validate/test datasets.
+
+# nobs=768 train=538 validate=115 test=115
+
+set.seed(crv$seed)
+
+crs$nobs <- nrow(crs$dataset)
+
+crs$train <- sample(crs$nobs, 0.7*crs$nobs)
+
+crs$nobs %>%
+  seq_len() %>%
+  setdiff(crs$train) %>%
+  sample(0.15*crs$nobs) ->
+crs$validate
+
+crs$nobs %>%
+  seq_len() %>%
+  setdiff(crs$train) %>%
+  setdiff(crs$validate) ->
+crs$test
+
+# The following variable selections have been noted.
+
+crs$input     <- c("pregnant", "glucose", "insulin", "mass",
+                   "age")
+
+crs$numeric   <- c("pregnant", "glucose", "insulin", "mass",
+                   "age")
+
+crs$categoric <- NULL
+
+crs$target    <- "diabetes"
+crs$risk      <- NULL
+crs$ident     <- NULL
+crs$ignore    <- c("pressure", "SkinThickness", "pedigree")
+crs$weights   <- NULL
+
+```
+
+```{r}
+
+library(rattle)   # Access the weather dataset and utilities.
+library(magrittr) # Utilise %>% and %<>% pipeline operators.
+
+# This log generally records the process of building a model. 
+# However, with very little effort the log can also be used 
+# to score a new dataset. The logical variable 'building' 
+# is used to toggle between generating transformations, 
+# when building a model and using the transformations, 
+# when scoring a dataset.
+
+building <- TRUE
+scoring  <- ! building
+
+# A pre-defined value is used to reset the random seed 
+# so that results are repeatable.
+
+crv$seed <- 42 
+
+#=======================================================================
+# Rattle timestamp: 2021-04-12 11:21:40 x86_64-w64-mingw32 
+
+# Load a dataset from file.
+
+fname         <- "file:///C:/Users/yangmenglei/Desktop/predictdiabetes.csv" 
+crs$dataset <- read.csv(fname,
+			na.strings=c(".", "NA", "", "?"),
+			strip.white=TRUE, encoding="UTF-8")
+
+#=======================================================================
+# Rattle timestamp: 2021-04-12 11:21:40 x86_64-w64-mingw32 
+
+# Action the user selections from the Data tab. 
+
+# Build the train/validate/test datasets.
+
+# nobs=768 train=538 validate=115 test=115
+
+set.seed(crv$seed)
+
+crs$nobs <- nrow(crs$dataset)
+
+crs$train <- sample(crs$nobs, 0.7*crs$nobs)
+
+crs$nobs %>%
+  seq_len() %>%
+  setdiff(crs$train) %>%
+  sample(0.15*crs$nobs) ->
+crs$validate
+
+crs$nobs %>%
+  seq_len() %>%
+  setdiff(crs$train) %>%
+  setdiff(crs$validate) ->
+crs$test
+
+# The following variable selections have been noted.
+
+crs$input     <- c("pregnant", "glucose", "pressure",
+                   "SkinThickness", "insulin", "mass", "pedigree",
+                   "age")
+
+crs$numeric   <- c("pregnant", "glucose", "pressure",
+                   "SkinThickness", "insulin", "mass", "pedigree",
+                   "age")
+
+crs$categoric <- NULL
+
+crs$target    <- "diabetes"
+crs$risk      <- NULL
+crs$ident     <- NULL
+crs$ignore    <- NULL
+crs$weights   <- NULL
+
+#=======================================================================
+# Rattle timestamp: 2021-04-12 11:21:49 x86_64-w64-mingw32 
+
+# Action the user selections from the Data tab. 
+
+# Build the train/validate/test datasets.
+
+# nobs=768 train=538 validate=115 test=115
+
+set.seed(crv$seed)
+
+crs$nobs <- nrow(crs$dataset)
+
+crs$train <- sample(crs$nobs, 0.7*crs$nobs)
+
+crs$nobs %>%
+  seq_len() %>%
+  setdiff(crs$train) %>%
+  sample(0.15*crs$nobs) ->
+crs$validate
+
+crs$nobs %>%
+  seq_len() %>%
+  setdiff(crs$train) %>%
+  setdiff(crs$validate) ->
+crs$test
+
+# The following variable selections have been noted.
+
+crs$input     <- c("pregnant", "glucose", "insulin", "mass",
+                   "age")
+
+crs$numeric   <- c("pregnant", "glucose", "insulin", "mass",
+                   "age")
+
+crs$categoric <- NULL
+
+crs$target    <- "diabetes"
+crs$risk      <- NULL
+crs$ident     <- NULL
+crs$ignore    <- c("pressure", "SkinThickness", "pedigree")
+crs$weights   <- NULL
+```
+
+```{r}
+set.seed(crv$seed)
+
+crs$rf <- randomForest::randomForest(as.factor(diabetes) ~ .,
+  data=crs$dataset[crs$train, c(crs$input, crs$target)], 
+  ntree=500,
+  mtry=2,
+  importance=TRUE,
+  na.action=randomForest::na.roughfix,
+  replace=FALSE)
+
+# Generate textual output of the 'Random Forest' model.
+
+crs$rf
+
+# List the importance of the variables.
+
+rn <- round(randomForest::importance(crs$rf), 2)
+rn[order(rn[,3], decreasing=TRUE),]
+
+# Time taken: 0.53 secs
+
+#=======================================================================
+# Rattle timestamp: 2021-04-12 11:24:51 x86_64-w64-mingw32 
+
+# Build a Random Forest model using the traditional approach.
+
+set.seed(crv$seed)
+
+crs$rf <- randomForest::randomForest(as.factor(diabetes) ~ .,
+  data=crs$dataset[crs$train, c(crs$input, crs$target)], 
+  ntree=500,
+  mtry=2,
+  importance=TRUE,
+  na.action=randomForest::na.roughfix,
+  replace=FALSE)
+
+# Generate textual output of the 'Random Forest' model.
+
+crs$rf
+
+# List the importance of the variables.
+
+rn <- round(randomForest::importance(crs$rf), 2)
+rn[order(rn[,3], decreasing=TRUE),]
+
+# Time taken: 0.51 secs
+```
+
+## 混淆矩阵评估筛选的特征组合
+
+```{r}
+
+
+#=======================================================================
+# Rattle timestamp: 2021-04-12 11:27:42 x86_64-w64-mingw32 
+
+# Support vector machine. 
+
+# The 'kernlab' package provides the 'ksvm' function.
+
+library(kernlab, quietly=TRUE)
+
+# Build a Support Vector Machine model.
+
+set.seed(crv$seed)
+crs$ksvm <- ksvm(as.factor(diabetes) ~ .,
+      data=crs$dataset[crs$train,c(crs$input, crs$target)],
+      kernel="rbfdot",
+      prob.model=TRUE)
+
+# Generate a textual view of the SVM model.
+
+crs$ksvm
+
+# Time taken: 0.09 secs#=======================================================================
+
+# Rattle is Copyright (c) 2006-2020 Togaware Pty Ltd.
+# It is free (as in libre) open source software.
+# It is licensed under the GNU General Public License,
+# Version 2. Rattle comes with ABSOLUTELY NO WARRANTY.
+# Rattle was written by Graham Williams with contributions
+# from others as acknowledged in 'library(help=rattle)'.
+# Visit https://rattle.togaware.com/ for details.
+
+# Rattle timestamp: 2021-04-12 11:23:20 x86_64-w64-mingw32 
+
+# Build a Random Forest model using the traditional approach.
+
+set.seed(crv$seed)
+
+crs$rf <- randomForest::randomForest(as.factor(diabetes) ~ .,
+  data=crs$dataset[crs$train, c(crs$input, crs$target)], 
+  ntree=500,
+  mtry=2,
+  importance=TRUE,
+  na.action=randomForest::na.roughfix,
+  replace=FALSE)
+
+# Generate textual output of the 'Random Forest' model.
+
+crs$rf
+
+# List the importance of the variables.
+
+rn <- round(randomForest::importance(crs$rf), 2)
+rn[order(rn[,3], decreasing=TRUE),]
+
+# Time taken: 0.53 secs
+
+#=======================================================================
+# Rattle timestamp: 2021-04-12 11:24:51 x86_64-w64-mingw32 
+
+# Build a Random Forest model using the traditional approach.
+
+set.seed(crv$seed)
+
+crs$rf <- randomForest::randomForest(as.factor(diabetes) ~ .,
+  data=crs$dataset[crs$train, c(crs$input, crs$target)], 
+  ntree=500,
+  mtry=2,
+  importance=TRUE,
+  na.action=randomForest::na.roughfix,
+  replace=FALSE)
+
+# Generate textual output of the 'Random Forest' model.
+
+crs$rf
+
+# List the importance of the variables.
+
+rn <- round(randomForest::importance(crs$rf), 2)
+rn[order(rn[,3], decreasing=TRUE),]
+
+# Time taken: 0.51 secs
+```
+
+## ROC曲线评估筛选的特征组合
+
+```{r}
+
+
+#=======================================================================
+# Rattle timestamp: 2021-04-12 11:33:15 x86_64-w64-mingw32 
+
+# Evaluate model performance on the validation dataset. 
+
+# ROC Curve: requires the ROCR package.
+
+library(ROCR)
+
+# Generate an ROC Curve for the rf model on predictdiabetes.csv [validate].
+
+crs$pr <- predict(crs$rf, newdata=na.omit(crs$dataset[crs$validate, c(crs$input, crs$target)]),
+    type    = "prob")[,2]
+
+# Remove observations with missing target.
+
+no.miss   <- na.omit(na.omit(crs$dataset[crs$validate, c(crs$input, crs$target)])$diabetes)
+miss.list <- attr(no.miss, "na.action")
+attributes(no.miss) <- NULL
+
+if (length(miss.list))
+{
+  pred <- prediction(crs$pr[-miss.list], no.miss)
+} else
+{
+  pred <- prediction(crs$pr, no.miss)
+}
+ROCR::plot(performance(pred, "tpr", "fpr"), col="#CC0000", lty=1, add=FALSE)
+
+# Calculate the area under the curve for the plot.
+
+
+# Remove observations with missing target.
+
+no.miss   <- na.omit(na.omit(crs$dataset[crs$validate, c(crs$input, crs$target)])$diabetes)
+miss.list <- attr(no.miss, "na.action")
+attributes(no.miss) <- NULL
+
+if (length(miss.list))
+{
+  pred <- prediction(crs$pr[-miss.list], no.miss)
+} else
+{
+  pred <- prediction(crs$pr, no.miss)
+}
+performance(pred, "auc")
+
+# ROC Curve: requires the ROCR package.
+
+library(ROCR)
+
+# Generate an ROC Curve for the ksvm model on predictdiabetes.csv [validate].
+
+crs$pr <- kernlab::predict(crs$ksvm, newdata=na.omit(crs$dataset[crs$validate, c(crs$input, crs$target)]),
+    type    = "probabilities")[,2]
+
+# Remove observations with missing target.
+
+no.miss   <- na.omit(na.omit(crs$dataset[crs$validate, c(crs$input, crs$target)])$diabetes)
+miss.list <- attr(no.miss, "na.action")
+attributes(no.miss) <- NULL
+
+if (length(miss.list))
+{
+  pred <- prediction(crs$pr[-miss.list], no.miss)
+} else
+{
+  pred <- prediction(crs$pr, no.miss)
+}
+ROCR::plot(performance(pred, "tpr", "fpr"), col="#00CCCC", lty=2, add=TRUE)
+
+# Calculate the area under the curve for the plot.
+
+
+# Remove observations with missing target.
+
+no.miss   <- na.omit(na.omit(crs$dataset[crs$validate, c(crs$input, crs$target)])$diabetes)
+miss.list <- attr(no.miss, "na.action")
+attributes(no.miss) <- NULL
+
+if (length(miss.list))
+{
+  pred <- prediction(crs$pr[-miss.list], no.miss)
+} else
+{
+  pred <- prediction(crs$pr, no.miss)
+}
+performance(pred, "auc")
+
+# Add a legend to the plot.
+
+legend("bottomright", c("rf","ksvm"), col=rainbow(2, 1, .8), lty=1:2, title="Models", inset=c(0.05, 0.05))
+
+# Add decorations to the plot.
+
+title(main="ROC Curve  predictdiabetes.csv [validate]",
+    sub=)
+grid()
+## Area under the ROC curve for the rf model on predictdiabetes.csv [validate] is 0.8170
+#======================================================================
+## Area under the ROC curve for the ksvm model on predictdiabetes.csv [validate] is 0.8105
+```
+
+\#由此可见，所选特征组合可以很好地预测分类（ROC=0.81）结果
