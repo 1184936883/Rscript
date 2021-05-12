@@ -1,0 +1,273 @@
+---
+title: "利用NMDS对药物处理下肠道菌群微生物群落多态性分析"
+author: "YangMenglei（杨梦磊）"
+date: "2021/5/12"
+output: html_document
+---
+
+> 参考文献：
+>
+> 1.  刘方邻.《大数据生态学研究方法》 [M]中国科学技术大学出版社.2021.
+>
+> 2.  Hadley .《 ggplot2：数据分析与图形艺术》 [M]西安交通大学出版社.2013.
+>
+> 3.  文中部分代码参考《大数据生态学研究方法》；
+>
+> 4.   ggvegan包、 yyplot包、ggord包 通过devtools下的install_github安装
+
+-   CSDN Rmarkdown博客同步:
+
+    <https://blog.csdn.net/qq_43337249/article/details/116703519>
+
+-   Github代码存储地址：
+
+    <https://github.com/1184936883/Rscript>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r work directory}
+##====设置工作目录
+getwd()
+setwd("D:/RStudio/project/NMDS")
+rm(list=ls())
+```
+
+## Workflow
+
+NMDS过程是迭代的，按照以下的workflow进行操作，对于我们已有的微生物群落数据，使用Bray-Curtis相异性计算，数据分为2个主要类别：（1）对照组；（2）实验组，在这个处理过程中，如果应力较高，则按减小应力的方向重新定位二维中的点，然后重复进行直到应力低于某个阈值（默认设置为0.2）， 目的在于对实验组和药物组处理微生物群落多态性进行分析，指导实验研究和药物代谢通路、肠道菌群稳态研究。
+
+## 绘制流程图
+
+```{r}
+library(DiagrammeR)
+grViz("digraph flowchart {
+# node definitions with substituted label text
+node [fontname = Helvetica, shape = rectangle]
+tab1 [label = '@@1',color=pink,fill=red]
+tab2 [label = '@@2']
+tab3 [label = '@@3']
+tab4 [label = '@@4']
+tab5 [label = '@@5']
+node [fontname = Helvetica, shape = rectangle, penwidth=0.5]
+tab6 [label = '@@6']
+tab7 [label = '@@7']
+# edge definitions with the node IDs
+tab1 -> tab2 -> tab3 -> tab4 -> tab5;
+tab5 -> tab6[label ='＞0.2',fontname = Helvetica];
+tab5 -> tab7[label ='＜0.2',fontname= Helvetica];
+}
+[1]: '在多维空间中定义微生物群落的原始位置'
+[2]: '指定降低维度的数量2'
+[3]: '二维构造样本的初始配置'
+[4]: '距离相对于观察到的（测量的）距离进行回归'
+[5]: '根据回归确定应力(stress)与预测值之间的差异'
+[6]: '再次迭代或扩大样本量'
+[7]: '符合要求，进行下一步可视化'
+")
+
+
+```
+
+## 载入需要的包
+
+```{r}
+##====加载需要的包 load required packages
+library(vegan)
+library(ggplot2)
+library(BiocManager)
+library(devtools)  
+#install_github("gavinsimpson/ggvegan")
+#devtools::install_github("GuangchuangYu/yyplot")
+#devtools::install_github("fawda123/ggord")
+library(ggvegan)   #可视化数据
+library(ggpubr)    #用于数据的可视化
+#其他包的加载，yyplot用于数据集的可视化
+library(yyplot)
+```
+
+## 数据集处理
+
+在生物信息学分析中，测序得到的每一条序列来自一个菌。为了了解一个样品测序结果中的菌种、菌属等数目信息，就需要对序列进行归类操作（cluster）。通过归类操作，将序列按照彼此的相似性分归为许多小组，一个小组就是一个OTU，这里我们基于分析已得到otu_table(bacteria),以及group分组：
+
++-----------------------+-----------+
+| 分组                  | 样本数    |
++=======================+===========+
+| control               | 20        |
++-----------------------+-----------+
+| d(experimental group) | 20        |
++-----------------------+-----------+
+
+```{r}
+##=====导入数据集   read OTU abundance frame
+bacteria <- read.delim("bacteriacolony.txt", row.names = 1, sep = '\t', stringsAsFactors = FALSE, check.names = FALSE)
+otu <- data.frame(t(bacteria)) 
+str(otu)  #查看数据集结构
+head(otu) #查看数据集前10行，方便下一步调用subset
+#tail(otu) #查看尾部的数据
+
+#我们可以看到每一列为一个样本，每一行为一种OTU，交叉区域为每种OTU在各样本中的丰度。
+```
+
+```{r}
+#排序（显示 4 个排序轴）#transform the mite absolute to relative values
+#otu_hel<-decostand(otu,method = "hellinger")
+#nmds1 <- metaMDS(otu_hel, distance = 'bray', k = 4) #
+nmds1 <- metaMDS(otu,autotransform = F,distance = 'bray', k = 2)
+#查看排序结果 
+summary(nmds1)
+stressplot(nmds1, main = "Shepard图")
+```
+
+```{r}
+#提取应力函数值（stress）
+nmds1.stress <- nmds1$stress
+#提取样本排序坐标
+nmds1.point <- data.frame(nmds1$point)
+#提取物种（OTU）排序坐标
+nmds1.species <- data.frame(nmds1$species)
+write.csv(nmds1.point, 'nmds.sample.csv')
+
+```
+
+```{r}
+#简要绘图展示
+nmds_plot <- nmds1
+nmds_plot$species <- {nmds_plot$species}[1:10, ]
+plot(nmds_plot, type = 't', main = paste('Stress =', round(nmds1$stress, 4)))
+
+#读入现有的距离矩阵
+dis <- read.delim('bray.txt', row.names = 1, sep = '\t', stringsAsFactors = FALSE, check.names = FALSE)
+
+#排序
+nmds2 <- metaMDS(as.dist(dis), k = 4)
+
+#可简要查看结果
+summary(nmds2)
+
+#简要绘图展示，可发现与基于 OTU 丰度表的 NMDS 排序结果不同
+plot(nmds2, type = 't', main = paste('Stress =', round(nmds2$stress, 4)))
+
+stressplot(nmds_plot, main = 'Shepard 图')
+gof <- goodness(nmds_plot)
+plot(nmds_plot,type = 't', main = '拟合度')
+points(nmds_plot, display = 'sites', cex = gof * 200, col = 'red')
+```
+
+```{r}
+##ggplot2 作图（使用基于 OTU 丰度表的 NMDS 排序结果，预设 2 个排序轴）
+#读入 OTU 丰度表
+otu <- read.delim('microbacteria_table.txt', row.names = 1, sep = '\t', stringsAsFactors = FALSE, check.names = FALSE)
+otu <- data.frame(t(otu))
+
+#读入样本分组文件
+group <- read.delim('group.txt', sep = '\t', stringsAsFactors = FALSE)
+
+#排序，预设 2 个排序轴
+nmds1 <- metaMDS(otu, distance = 'bray', k = 2)
+
+#提取样本点坐标（前两轴）
+sample_site <- nmds1.point[1:2]
+sample_site$names <- rownames(sample_site)
+names(sample_site)[1:2] <- c('NMDS1', 'NMDS2')
+
+#为样本点坐标添加分组信息
+fort<-fortify(nmds1)
+sample_site <- merge(sample_site, group, by = 'names', all.x = TRUE)
+
+ggplot()+
+  geom_point(data=subset(fort, Score=='sites'),
+             mapping=aes(x=NMDS1, y=NMDS2),
+             colour= "black" ,
+             alpha=0.5)+
+  geom_segment(data = subset(fort, Score=='species'),
+               mapping = aes(x=0, y=0, xend=NMDS1, yend=NMDS2),
+               arrow = arrow(length = unit(0.015, "npc"),
+                             type = "closed"),
+               colour="darkgray",
+               size=0.8)+
+  geom_text(data = subset(fort, Score=='species'),
+            mapping = aes(label=Label, x=NMDS1*1.1, y=NMDS2*1.1))+
+  geom_abline(intercept = 0, slope = 0, linetype="dashed", size=0.8, colour="gray")+
+  geom_vline(aes(xintercept=0), linetype="dashed", size=0.8,colour="gray")+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"))
+```
+
+```{r}
+#=====yyplot包d对分组进行可视化，用到了包里的geom_ord_ellipse函数
+library(yyplot)
+nmds_plot <- ggplot() +
+  geom_point(data = sample_site, aes(NMDS1, NMDS2,color = group ,shape = group ), size = 5, alpha = 0.8) + #可在这里修改点的透明度、大小
+  #scale_shape_manual(values = c(17, 16)) + #可在这里修改点的形状
+  #scale_color_manual(values = c('red', 'blue')) + #可在这里修改点的颜色
+  geom_ord_ellipse(aes(sample_site$NMDS1,sample_site$NMDS2,group= sample_site$site2), ##添加0.8置信椭圆
+                   ellipse_pro = 0.8,linetype=2,size=0.7,color='firebrick')+
+  geom_ord_ellipse(aes(sample_site$NMDS1,sample_site$NMDS2,color= sample_site$site2,group= sample_site$site2),
+                   ellipse_pro = 0.9,linetype=3,size=1)+ ##添加0.9置信椭圆
+  theme(panel.grid = element_blank(), panel.background = element_rect(color = 'black', fill = 'transparent')) + #去掉背景  
+  theme(legend.key = element_rect(fill = 'transparent'), legend.title = element_blank()) + #去掉图例标题及标签背景
+  labs(x = 'NMDS 1', y = 'NMDS 2', title ='Stress = 0.0382') +   
+  #labs(x = 'NMDS 1', y = 'NMDS 2', title = paste('Stress = round(nmds1$stress, 4'))) 
+  theme(plot.title = element_text(hjust = 1.0))+  #标题居中
+  theme(panel.background = element_blank(),axis.line = element_line(color = "black"))#去上右边框
+nmds_plot
+```
+
+```{r}
+#make a two panel plot to reduce complexity
+p1<-
+  ggplot()+
+  geom_point(data=subset(fort, Score=='sites'),
+             mapping=aes(x=NMDS1, y=NMDS2),
+             colour="black",
+             alpha=0.5)+
+  geom_segment(data = subset(fort, Score=='species'),
+               mapping = aes(x=0, y=0, xend=NMDS1, yend=NMDS2),
+               arrow = arrow(length = unit(0.015, "npc"),
+                             type = "closed"),
+               colour="darkgray",
+               size=0,
+               alpha=0)+
+  geom_text(data = subset(fort, Score=='species'),
+            mapping = aes(label=Label, x=NMDS1*1.1, y=NMDS2*1.1),
+            alpha=0)+
+  geom_abline(intercept = 0, slope = 0, linetype="dashed", size=0.8, colour="gray")+
+  geom_vline(aes(xintercept=0), linetype="dashed", size=0.8,colour="gray")+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"))
+
+p2<-ggplot()+
+  geom_point(data=subset(fort, Score=='sites'),
+             mapping=aes(x=NMDS1, y=NMDS2),
+             colour="black",
+             alpha=0)+
+  geom_segment(data = subset(fort, Score=='species'),
+               mapping = aes(x=0, y=0, xend=NMDS1, yend=NMDS2),
+               arrow = arrow(length = unit(0.015, "npc"),
+                             type = "closed"),
+               colour="darkgray",
+               size=0)+
+  geom_text(data = subset(fort, Score=='species'),
+            mapping = aes(label=Label, x=NMDS1*1.1, y=NMDS2*1.1))+
+  geom_abline(intercept = 0, slope = 0, linetype="dashed", size=0.8, colour="gray")+
+  geom_vline(aes(xintercept=0), linetype="dashed", size=0.8,colour="gray")+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black"))
+
+#create a multi-panel plot with one column
+library(ggpubr)
+ggarrange(p1, p2, ncol = 1)
+
+ggplot(sample_site, aes(NMDS1, NMDS2, color = group,size = NMDS1)) + geom_point()
+
+```
